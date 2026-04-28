@@ -105,9 +105,18 @@ jobs:
         working-directory: ./assets
         run: |
           shopt -s nullglob
-          for sha in *.sha256; do
-            echo "Verifying $sha"
-            sha256sum -c "$sha"
+          for sha_file in *.sha256; do
+            artifact=$(basename "$sha_file" .sha256)
+            expected=$(awk '{print $1}' "$sha_file")
+            actual=$(sha256sum "$artifact" | awk '{print $1}')
+            if [ "$expected" = "$actual" ]; then
+              echo "OK: $artifact ($expected)"
+            else
+              echo "FAIL: $artifact"
+              echo "  expected: $expected"
+              echo "  actual:   $actual"
+              exit 1
+            fi
           done
 
       - name: Unpack tarballs and generate SBOMs
