@@ -223,7 +223,7 @@ EOFNOTES
             latest_flag="--latest=false"
           fi
 
-          gh release create "$SRC_TAG" \
+          gh release create "$OUT_TAG" \
             --repo compassfordata/compass-releases \
             --title "DATA Compass $OUT_TAG" \
             --notes-file "${{ steps.notes.outputs.file }}" \
