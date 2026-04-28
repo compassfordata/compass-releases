@@ -36,6 +36,11 @@ on:
         required: false
         type: string
         default: ''
+      output_tag:
+        description: 'Override the tag used in compass-releases (default: same as source_tag). Use for throwaway test runs like v1.1.0-rc-mirror-test.'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: write   # write to this repo's releases
@@ -57,6 +62,16 @@ jobs:
 
       - name: Checkout (workflow context)
         uses: actions/checkout@v4
+
+      - name: Resolve effective output tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.output_tag }}" ]; then
+            echo "effective=${{ inputs.output_tag }}" >> "$GITHUB_OUTPUT"
+            echo "Output tag overridden: ${{ inputs.output_tag }} (source: ${{ inputs.source_tag }})"
+          else
+            echo "effective=${{ inputs.source_tag }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Mint GitHub App token
         id: app-token
@@ -191,6 +206,7 @@ EOFNOTES
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           IS_LATEST: ${{ inputs.is_latest }}
           SRC_TAG: ${{ inputs.source_tag }}
+          OUT_TAG: ${{ steps.tag.outputs.effective }}
         run: |
           shopt -s nullglob
           # Collect all assets to upload
@@ -214,4 +230,4 @@ EOFNOTES
             $latest_flag \
             "${uploads[@]}"
 
-          echo "Mirrored release: https://github.com/compassfordata/compass-releases/releases/tag/$SRC_TAG"
+          echo "Mirrored release: https://github.com/compassfordata/compass-releases/releases/tag/$OUT_TAG"
