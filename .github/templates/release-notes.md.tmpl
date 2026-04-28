@@ -1,0 +1,16 @@
+${DEPRECATION_BANNER}## DATA Compass ${OUT_TAG}
+
+Mirrored from `compassfordata/data-compass@${SRC_SHA}` at ${TIMESTAMP}.
+
+### Verifying artifacts
+
+See [README — Verifying release artifacts](https://github.com/compassfordata/compass-releases#verifying-release-artifacts) for the exact `cosign verify-blob` invocation and expected OIDC issuer/identity.
+
+### Assets
+
+- `compass-deploy-v*.tar.gz` — online deploy bundle
+- `compass-offline-v*.tar.gz` — offline (air-gapped) deploy bundle (where applicable)
+- `compass-setup.sh` — online installer entry-point
+- `*.sig` + `*.cert` — cosign keyless signatures (Sigstore Fulcio / Rekor)
+- `*.cdx.json` — CycloneDX SBOM generated from unpacked tarball contents (also signed)
+- `*.sha256` — original checksums from the source release

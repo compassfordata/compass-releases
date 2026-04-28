@@ -173,31 +173,15 @@ jobs:
           CVE_SUMMARY: ${{ inputs.cve_summary }}
         run: |
           notes_file="$(mktemp)"
+          export TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           if [ "$DEPRECATED" = "true" ]; then
-            cve="${CVE_SUMMARY:-known high-severity vulnerabilities}"
-            cat <<EOFBANNER >> "$notes_file"
-> **DEPRECATED.** This release contains $cve patched in newer versions. Install only for compatibility with pre-existing deployments. Upgrade as soon as possible.
-
-EOFBANNER
+            export CVE_SUMMARY="${CVE_SUMMARY:-known high-severity vulnerabilities}"
+            export DEPRECATION_BANNER="$(envsubst < .github/templates/deprecation-banner.md.tmpl)"
+          else
+            export DEPRECATION_BANNER=""
           fi
-          cat <<EOFNOTES >> "$notes_file"
-## DATA Compass $OUT_TAG
-
-Mirrored from \`compassfordata/data-compass@$SRC_SHA\` at $(date -u +%Y-%m-%dT%H:%M:%SZ).
-
-### Verifying artifacts
-
-See [README — Verifying release artifacts](https://github.com/compassfordata/compass-releases#verifying-release-artifacts) for the exact \`cosign verify-blob\` invocation and expected OIDC issuer/identity.
-
-### Assets
-
-- \`compass-deploy-v*.tar.gz\` — online deploy bundle
-- \`compass-offline-v*.tar.gz\` — offline (air-gapped) deploy bundle (where applicable)
-- \`compass-setup.sh\` — online installer entry-point
-- \`*.sig\` + \`*.cert\` — cosign keyless signatures (Sigstore Fulcio / Rekor)
-- \`*.cdx.json\` — CycloneDX SBOM generated from unpacked tarball contents (also signed)
-- \`*.sha256\` — original checksums from the source release
-EOFNOTES
+          export OUT_TAG SRC_SHA
+          envsubst < .github/templates/release-notes.md.tmpl > "$notes_file"
           echo "file=$notes_file" >> "$GITHUB_OUTPUT"
           echo "--- Release notes preview ---"
           cat "$notes_file"

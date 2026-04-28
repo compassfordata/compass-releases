@@ -122,26 +122,13 @@ jobs:
         env:
           SRC_SHA: ${{ github.event.client_payload.source_sha }}
           SRC_TAG: ${{ github.event.client_payload.source_tag }}
+          OUT_TAG: ${{ github.event.client_payload.source_tag }}
         run: |
           notes_file="$(mktemp)"
-          cat <<EOFNOTES >> "$notes_file"
-## DATA Compass $SRC_TAG
-
-Mirrored from \`compassfordata/data-compass@$SRC_SHA\` at $(date -u +%Y-%m-%dT%H:%M:%SZ).
-
-### Verifying artifacts
-
-See [README — Verifying release artifacts](https://github.com/compassfordata/compass-releases#verifying-release-artifacts) for the exact \`cosign verify-blob\` invocation and expected OIDC issuer/identity.
-
-### Assets
-
-- \`compass-deploy-v*.tar.gz\` — online deploy bundle
-- \`compass-offline-v*.tar.gz\` — offline (air-gapped) deploy bundle (where applicable)
-- \`compass-setup.sh\` — online installer entry-point
-- \`*.sig\` + \`*.cert\` — cosign keyless signatures (Sigstore Fulcio / Rekor)
-- \`*.cdx.json\` — CycloneDX SBOM generated from unpacked tarball contents (also signed)
-- \`*.sha256\` — original checksums from the source release
-EOFNOTES
+          export TIMESTAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export DEPRECATION_BANNER=""
+          export OUT_TAG SRC_SHA
+          envsubst < .github/templates/release-notes.md.tmpl > "$notes_file"
           echo "file=$notes_file" >> "$GITHUB_OUTPUT"
 
       - name: Create release on compass-releases
