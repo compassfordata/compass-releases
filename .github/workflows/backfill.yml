@@ -225,7 +225,7 @@ EOFNOTES
 
           gh release create "$SRC_TAG" \
             --repo compassfordata/compass-releases \
-            --title "DATA Compass $SRC_TAG" \
+            --title "DATA Compass $OUT_TAG" \
             --notes-file "${{ steps.notes.outputs.file }}" \
             $latest_flag \
             "${uploads[@]}"
