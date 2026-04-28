@@ -119,6 +119,18 @@ jobs:
             fi
           done
 
+      - name: Sanitize source checksum files (drop any path prefix in path column)
+        working-directory: ./assets
+        run: |
+          shopt -s nullglob
+          for sha_file in *.sha256; do
+            artifact=$(basename "$sha_file" .sha256)
+            hash=$(awk '{print $1}' "$sha_file")
+            echo "$hash  $artifact" > "$sha_file"
+          done
+          echo "Sanitized .sha256 files:"
+          for f in *.sha256; do echo "  $f -> $(cat "$f")"; done
+
       - name: Unpack tarballs and generate SBOMs
         run: |
           shopt -s nullglob
