@@ -27,7 +27,7 @@ To verify a release artifact:
 cosign verify-blob \
   --certificate compass-deploy-vX.Y.Z.tar.gz.cert \
   --signature   compass-deploy-vX.Y.Z.tar.gz.sig \
-  --certificate-identity-regexp 'https://github\.com/compassfordata/compass-releases/\.github/workflows/(backfill|publish)\.yml@refs/heads/main' \
+  --certificate-identity-regexp 'https://github.com/compassfordata/compass-releases/.github/workflows/(backfill|publish).yml@refs/heads/main' \
   --certificate-oidc-issuer     'https://token.actions.githubusercontent.com' \
   compass-deploy-vX.Y.Z.tar.gz
 ```
@@ -54,7 +54,7 @@ its contents cannot be silently swapped. Verify it the same way:
 cosign verify-blob \
   --certificate compass-deploy-vX.Y.Z.cdx.json.cert \
   --signature   compass-deploy-vX.Y.Z.cdx.json.sig \
-  --certificate-identity-regexp 'https://github\.com/compassfordata/compass-releases/\.github/workflows/(backfill|publish)\.yml@refs/heads/main' \
+  --certificate-identity-regexp 'https://github.com/compassfordata/compass-releases/.github/workflows/(backfill|publish).yml@refs/heads/main' \
   --certificate-oidc-issuer     'https://token.actions.githubusercontent.com' \
   compass-deploy-vX.Y.Z.cdx.json
 ```
