@@ -1,0 +1,173 @@
+# Publish — mirror a new release from compassfordata/data-compass into
+# compassfordata/compass-releases. Triggered via repository_dispatch from
+# data-compass's release.yml after the source release is created.
+#
+# This is the steady-state pipeline. For one-time historical mirroring of
+# releases that predate this automation, see backfill.yml. The two workflows
+# share the cosign certificate identity regex
+#   https://github.com/compassfordata/compass-releases/.github/workflows/(backfill|publish).yml@refs/heads/main
+# so customer verification commands work identically against any release in
+# this repo.
+#
+# Expected client_payload from data-compass:
+#   { "source_tag": "v1.2.0", "source_sha": "<commit-sha>", "is_latest": true }
+
+name: Publish — mirror new release
+
+on:
+  repository_dispatch:
+    types: [new-release]
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  mirror:
+    name: Mirror ${{ github.event.client_payload.source_tag }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce main branch (cosign cert identity binding)
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::This workflow must run from refs/heads/main."
+            echo "::error::Got: $GITHUB_REF"
+            echo "::error::Customer verification regex requires the main branch."
+            exit 1
+          fi
+
+      - name: Validate dispatch payload
+        run: |
+          if [ -z "${{ github.event.client_payload.source_tag }}" ]; then
+            echo "::error::client_payload.source_tag is required"
+            exit 1
+          fi
+          if [ -z "${{ github.event.client_payload.source_sha }}" ]; then
+            echo "::error::client_payload.source_sha is required"
+            exit 1
+          fi
+
+      - name: Checkout (workflow context)
+        uses: actions/checkout@v4
+
+      - name: Mint GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: compassfordata
+          repositories: |
+            data-compass
+            compass-releases
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Install syft
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Download source release assets
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SRC_TAG: ${{ github.event.client_payload.source_tag }}
+        run: |
+          mkdir -p ./assets
+          gh release download "$SRC_TAG" \
+            --repo compassfordata/data-compass \
+            --dir ./assets
+          ls -la ./assets
+
+      - name: Verify source checksums
+        working-directory: ./assets
+        run: |
+          shopt -s nullglob
+          for sha in *.sha256; do
+            sha256sum -c "$sha"
+          done
+
+      - name: Unpack tarballs and generate SBOMs
+        run: |
+          shopt -s nullglob
+          mkdir -p ./sboms
+          for tarball in ./assets/*.tar.gz; do
+            name=$(basename "$tarball" .tar.gz)
+            unpack_dir="/tmp/${name}-unpacked"
+            mkdir -p "$unpack_dir"
+            tar -xzf "$tarball" -C "$unpack_dir"
+            syft "$unpack_dir" -o cyclonedx-json="./sboms/${name}.cdx.json"
+          done
+
+      - name: Cosign sign artifacts
+        run: |
+          shopt -s nullglob
+          for artifact in ./assets/*.tar.gz ./assets/compass-setup.sh; do
+            [ -f "$artifact" ] || continue
+            cosign sign-blob \
+              --yes \
+              --output-signature "${artifact}.sig" \
+              --output-certificate "${artifact}.cert" \
+              "$artifact"
+          done
+          for sbom in ./sboms/*.cdx.json; do
+            cosign sign-blob \
+              --yes \
+              --output-signature "${sbom}.sig" \
+              --output-certificate "${sbom}.cert" \
+              "$sbom"
+          done
+
+      - name: Compose release notes
+        id: notes
+        env:
+          SRC_SHA: ${{ github.event.client_payload.source_sha }}
+          SRC_TAG: ${{ github.event.client_payload.source_tag }}
+        run: |
+          notes_file="$(mktemp)"
+          cat <<EOFNOTES >> "$notes_file"
+## DATA Compass $SRC_TAG
+
+Mirrored from \`compassfordata/data-compass@$SRC_SHA\` at $(date -u +%Y-%m-%dT%H:%M:%SZ).
+
+### Verifying artifacts
+
+See [README — Verifying release artifacts](https://github.com/compassfordata/compass-releases#verifying-release-artifacts) for the exact \`cosign verify-blob\` invocation and expected OIDC issuer/identity.
+
+### Assets
+
+- \`compass-deploy-v*.tar.gz\` — online deploy bundle
+- \`compass-offline-v*.tar.gz\` — offline (air-gapped) deploy bundle (where applicable)
+- \`compass-setup.sh\` — online installer entry-point
+- \`*.sig\` + \`*.cert\` — cosign keyless signatures (Sigstore Fulcio / Rekor)
+- \`*.cdx.json\` — CycloneDX SBOM generated from unpacked tarball contents (also signed)
+- \`*.sha256\` — original checksums from the source release
+EOFNOTES
+          echo "file=$notes_file" >> "$GITHUB_OUTPUT"
+
+      - name: Create release on compass-releases
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          SRC_TAG: ${{ github.event.client_payload.source_tag }}
+          IS_LATEST: ${{ github.event.client_payload.is_latest }}
+        run: |
+          shopt -s nullglob
+          uploads=()
+          for f in ./assets/*.tar.gz ./assets/*.sha256 ./assets/compass-setup.sh \
+                   ./assets/*.sig ./assets/*.cert \
+                   ./sboms/*.cdx.json ./sboms/*.sig ./sboms/*.cert; do
+            [ -f "$f" ] && uploads+=("$f")
+          done
+
+          # Default to Latest=true unless dispatch explicitly says otherwise
+          if [ "$IS_LATEST" = "false" ]; then
+            latest_flag="--latest=false"
+          else
+            latest_flag="--latest=true"
+          fi
+
+          gh release create "$SRC_TAG" \
+            --repo compassfordata/compass-releases \
+            --title "DATA Compass $SRC_TAG" \
+            --notes-file "${{ steps.notes.outputs.file }}" \
+            $latest_flag \
+            "${uploads[@]}"
